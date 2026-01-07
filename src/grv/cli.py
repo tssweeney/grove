@@ -1,5 +1,7 @@
 import os
+import shutil
 import subprocess
+from pathlib import Path
 
 import click
 
@@ -111,17 +113,34 @@ def clean(dry_run: bool, force: bool) -> None:
     if not force:
         click.confirm(f"\nRemove {len(to_clean)} worktree(s)?", abort=True)
     click.echo("")
+    affected_repos: set[Path] = set()
     for b in to_clean:
-        trunk = b.path.parent.parent / "trunk"
+        idx = b.path.parts.index("tree_branches")
+        repo_root = Path(*b.path.parts[:idx])
+        affected_repos.add(repo_root)
         click.echo(f"  Removing {click.style(b.name, fg='cyan')}...", nl=False)
         for cmd in [
             ["git", "worktree", "remove", str(b.path)],
             ["git", "branch", "-d", b.name],
         ]:
-            subprocess.run(cmd, cwd=trunk, capture_output=True)
+            subprocess.run(cmd, cwd=repo_root / "trunk", capture_output=True)
         click.secho(" done", fg="green")
 
-    click.secho(f"\nCleaned {len(to_clean)} worktree(s).", fg="green", bold=True)
+    repos_removed = 0
+    for repo_root in affected_repos:
+        if not get_repo_branches_fast(repo_root):
+            click.echo(
+                f"  Removing empty repo {click.style(repo_root.name, fg='yellow')}...",
+                nl=False,
+            )
+            shutil.rmtree(repo_root)
+            repos_removed += 1
+            click.secho(" done", fg="green")
+
+    suffix = f" and {repos_removed} empty repo(s)" if repos_removed else ""
+    click.secho(
+        f"\nCleaned {len(to_clean)} worktree(s){suffix}.", fg="green", bold=True
+    )
 
 
 if __name__ == "__main__":
