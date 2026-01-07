@@ -21,6 +21,7 @@ Run all before committing.
 
 ## Architecture
 
+- `constants.py` - All magic strings/numbers as named constants
 - `config.py` - Configuration and repo ID extraction
 - `git.py` - Git operations (clone, worktree, etc.)
 - `status.py` - Branch status detection
@@ -40,3 +41,4 @@ Keep modules focused. CLI should be thin, delegating to other modules.
 - No unused imports or variables
 - Type hints on all functions
 - Minimal docstrings (code should be self-documenting)
+- **No magic strings or numbers.** Define all constants at the top of the file or import from `constants.py`. The `PLR2004` lint rule enforces this for comparisons.

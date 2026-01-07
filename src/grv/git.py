@@ -3,6 +3,13 @@ from pathlib import Path
 
 import click
 
+from grv.constants import (
+    GIT_CLONE_FILTER,
+    GIT_REF_HEADS_FMT,
+    GIT_REF_REMOTE_HEAD,
+    GIT_REMOTE_NAME,
+)
+
 
 def run_git(
     *args: str, cwd: Path | None = None, capture: bool = False
@@ -16,16 +23,15 @@ def run_git(
 
 def get_default_branch(repo_path: Path) -> str:
     """Get the default branch name (main or master)."""
-    result = run_git(
-        "symbolic-ref", "refs/remotes/origin/HEAD", cwd=repo_path, capture=True
-    )
+    result = run_git("symbolic-ref", GIT_REF_REMOTE_HEAD, cwd=repo_path, capture=True)
     return result.stdout.strip().split("/")[-1]
 
 
 def branch_exists_locally(base_path: Path, branch: str) -> bool:
     """Check if a branch exists locally."""
+    ref = GIT_REF_HEADS_FMT.format(branch=branch)
     result = subprocess.run(
-        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+        ["git", "show-ref", "--verify", "--quiet", ref],
         cwd=base_path,
     )
     return result.returncode == 0
@@ -37,15 +43,17 @@ def ensure_base_repo(repo_url: str, base_path: Path) -> None:
         click.secho("Fetching latest changes...", fg="blue", err=True)
         run_git("fetch", "--all", "--prune", cwd=base_path)
         default_branch = get_default_branch(base_path)
-        run_git("checkout", "--detach", f"origin/{default_branch}", cwd=base_path)
+        detach_ref = f"{GIT_REMOTE_NAME}/{default_branch}"
+        run_git("checkout", "--detach", detach_ref, cwd=base_path)
     else:
         click.secho(
             "Cloning repository (this may take a moment)...", fg="blue", err=True
         )
         base_path.parent.mkdir(parents=True, exist_ok=True)
-        run_git("clone", "--filter=blob:none", repo_url, str(base_path))
+        run_git("clone", GIT_CLONE_FILTER, repo_url, str(base_path))
         default_branch = get_default_branch(base_path)
-        run_git("checkout", "--detach", f"origin/{default_branch}", cwd=base_path)
+        detach_ref = f"{GIT_REMOTE_NAME}/{default_branch}"
+        run_git("checkout", "--detach", detach_ref, cwd=base_path)
 
 
 def ensure_worktree(base_path: Path, tree_path: Path, branch: str) -> None:
@@ -62,7 +70,7 @@ def ensure_worktree(base_path: Path, tree_path: Path, branch: str) -> None:
         return
 
     result = run_git(
-        "ls-remote", "--heads", "origin", branch, cwd=base_path, capture=True
+        "ls-remote", "--heads", GIT_REMOTE_NAME, branch, cwd=base_path, capture=True
     )
 
     if result.stdout.strip():
@@ -73,7 +81,7 @@ def ensure_worktree(base_path: Path, tree_path: Path, branch: str) -> None:
             "-b",
             branch,
             str(tree_path),
-            f"origin/{branch}",
+            f"{GIT_REMOTE_NAME}/{branch}",
             cwd=base_path,
         )
     else:

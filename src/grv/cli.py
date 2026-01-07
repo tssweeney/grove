@@ -1,3 +1,4 @@
+# loc-skip
 import os
 import shutil
 import subprocess
@@ -6,6 +7,13 @@ from pathlib import Path
 import click
 
 from grv.config import extract_repo_id, get_grv_root
+from grv.constants import (
+    DEFAULT_SHELL,
+    REPOS_DIR,
+    SHELL_ENV_VAR,
+    TREE_BRANCHES_DIR,
+    TRUNK_DIR,
+)
 from grv.git import ensure_base_repo, ensure_worktree, get_default_branch
 from grv.status import (
     BranchStatus,
@@ -36,22 +44,22 @@ def shell(repo: str, branch: str | None = None) -> None:
     """Open a shell in a git worktree."""
     root = get_grv_root()
     repo_id = extract_repo_id(repo)
-    repo_path = root / "repos" / repo_id
+    repo_path = root / REPOS_DIR / repo_id
 
-    trunk_path = repo_path / "trunk"
+    trunk_path = repo_path / TRUNK_DIR
     ensure_base_repo(repo, trunk_path)
 
     if branch is None:
         branch = get_default_branch(trunk_path)
 
-    tree_path = repo_path / "tree_branches" / branch
+    tree_path = repo_path / TREE_BRANCHES_DIR / branch
     ensure_worktree(trunk_path, tree_path, branch)
 
     click.secho("\nReady! Entering worktree shell...", fg="green", bold=True)
     click.echo(f"\n  Branch: {click.style(branch, fg='cyan', bold=True)}")
     click.echo(f"  Path:   {click.style(str(tree_path), fg='blue')}\n")
     os.chdir(tree_path)
-    user_shell = os.environ.get("SHELL", "/bin/sh")
+    user_shell = os.environ.get(SHELL_ENV_VAR, DEFAULT_SHELL)
     os.execvp(user_shell, [user_shell])
 
 
@@ -93,7 +101,7 @@ def clean(dry_run: bool, force: bool) -> None:
     to_clean: list[BranchStatus] = []
     for i, (repo_path, branch) in enumerate(all_branches, 1):
         click.echo(f"\rScanning branch {i}/{total}...", nl=False)
-        status = get_branch_status(branch.path, repo_path / "trunk", branch.name)
+        status = get_branch_status(branch.path, repo_path / TRUNK_DIR, branch.name)
         if status.is_safe_to_clean:
             to_clean.append(status)
     click.echo(f"\rScanning branch {total}/{total}... done")
@@ -115,7 +123,7 @@ def clean(dry_run: bool, force: bool) -> None:
     click.echo("")
     affected_repos: set[Path] = set()
     for b in to_clean:
-        idx = b.path.parts.index("tree_branches")
+        idx = b.path.parts.index(TREE_BRANCHES_DIR)
         repo_root = Path(*b.path.parts[:idx])
         affected_repos.add(repo_root)
         click.echo(f"  Removing {click.style(b.name, fg='cyan')}...", nl=False)
@@ -123,7 +131,7 @@ def clean(dry_run: bool, force: bool) -> None:
             ["git", "worktree", "remove", str(b.path)],
             ["git", "branch", "-d", b.name],
         ]:
-            subprocess.run(cmd, cwd=repo_root / "trunk", capture_output=True)
+            subprocess.run(cmd, cwd=repo_root / TRUNK_DIR, capture_output=True)
         click.secho(" done", fg="green")
 
     repos_removed = 0

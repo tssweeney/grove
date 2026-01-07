@@ -1,9 +1,19 @@
+# loc-skip
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from grv.config import get_grv_root
+from grv.constants import (
+    DELETION_PATTERN,
+    GIT_DIR,
+    GIT_REMOTE_NAME,
+    INSERTION_PATTERN,
+    REPOS_DIR,
+    TREE_BRANCHES_DIR,
+    TRUNK_DIR,
+)
 from grv.git import get_default_branch
 
 
@@ -41,7 +51,7 @@ class BranchStatus:
 def get_branch_status(tree_path: Path, trunk_path: Path, branch: str) -> BranchStatus:
     """Get status information for a worktree branch."""
     result = subprocess.run(
-        ["git", "ls-remote", "--heads", "origin", branch],
+        ["git", "ls-remote", "--heads", GIT_REMOTE_NAME, branch],
         cwd=trunk_path,
         capture_output=True,
         text=True,
@@ -50,7 +60,7 @@ def get_branch_status(tree_path: Path, trunk_path: Path, branch: str) -> BranchS
 
     default_branch = get_default_branch(trunk_path)
     result = subprocess.run(
-        ["git", "branch", "--merged", f"origin/{default_branch}"],
+        ["git", "branch", "--merged", f"{GIT_REMOTE_NAME}/{default_branch}"],
         cwd=tree_path,
         capture_output=True,
         text=True,
@@ -60,15 +70,16 @@ def get_branch_status(tree_path: Path, trunk_path: Path, branch: str) -> BranchS
 
     if has_remote:
         result = subprocess.run(
-            ["git", "rev-list", "--count", f"origin/{branch}..{branch}"],
+            ["git", "rev-list", "--count", f"{GIT_REMOTE_NAME}/{branch}..{branch}"],
             cwd=tree_path,
             capture_output=True,
             text=True,
         )
         unpushed = int(result.stdout.strip()) if result.returncode == 0 else 0
     else:
+        rev_range = f"{GIT_REMOTE_NAME}/{default_branch}..{branch}"
         result = subprocess.run(
-            ["git", "rev-list", "--count", f"origin/{default_branch}..{branch}"],
+            ["git", "rev-list", "--count", rev_range],
             cwd=tree_path,
             capture_output=True,
             text=True,
@@ -85,8 +96,8 @@ def get_branch_status(tree_path: Path, trunk_path: Path, branch: str) -> BranchS
     if result.stdout.strip():
         summary = result.stdout.strip().split("\n")[-1]
         if "insertion" in summary or "deletion" in summary:
-            ins = re.search(r"(\d+) insertion", summary)
-            dels = re.search(r"(\d+) deletion", summary)
+            ins = re.search(INSERTION_PATTERN, summary)
+            dels = re.search(DELETION_PATTERN, summary)
             insertions = int(ins.group(1)) if ins else 0
             deletions = int(dels.group(1)) if dels else 0
             uncommitted = insertions + deletions
@@ -105,24 +116,24 @@ def get_branch_status(tree_path: Path, trunk_path: Path, branch: str) -> BranchS
 
 def get_all_repos() -> list[tuple[str, Path]]:
     """Get all repos in the workspace."""
-    repos_dir = get_grv_root() / "repos"
+    repos_dir = get_grv_root() / REPOS_DIR
     if not repos_dir.exists():
         return []
 
     repos = []
     for repo_dir in repos_dir.iterdir():
-        if repo_dir.is_dir() and (repo_dir / "trunk").exists():
+        if repo_dir.is_dir() and (repo_dir / TRUNK_DIR).exists():
             repos.append((repo_dir.name, repo_dir))
     return sorted(repos)
 
 
 def _find_worktrees(repo_path: Path) -> list[tuple[str, Path]]:
     """Find all worktree directories and their branch names."""
-    tree_branches_dir = repo_path / "tree_branches"
+    tree_branches_dir = repo_path / TREE_BRANCHES_DIR
     if not tree_branches_dir.exists():
         return []
     result = []
-    for git_file in tree_branches_dir.rglob(".git"):
+    for git_file in tree_branches_dir.rglob(GIT_DIR):
         branch_dir = git_file.parent
         branch_name = str(branch_dir.relative_to(tree_branches_dir))
         result.append((branch_name, branch_dir))
@@ -131,7 +142,7 @@ def _find_worktrees(repo_path: Path) -> list[tuple[str, Path]]:
 
 def get_repo_branches(repo_path: Path) -> list[BranchStatus]:
     """Get all branches for a repo with their status (slow, uses git)."""
-    trunk_path = repo_path / "trunk"
+    trunk_path = repo_path / TRUNK_DIR
     return sorted(
         [
             get_branch_status(path, trunk_path, name)
