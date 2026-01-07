@@ -29,8 +29,10 @@ That's it. Use your favorite editor, CLI tools, whatever. But stay organized.
 
 ## Install
 
+> **Alpha**: Not yet published to PyPI.
+
 ```bash
-uv tool install grove
+uvx git+https://github.com/tssweeney/grove [commands]
 ```
 
 ## Usage
