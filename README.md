@@ -29,10 +29,12 @@ That's it. Use your favorite editor, CLI tools, whatever. But stay organized.
 
 ## Install
 
-> **Alpha**: Not yet published to PyPI.
-
 ```bash
-uvx git+https://github.com/tssweeney/grv [commands]
+# Run directly (no install needed)
+uvx grv [command]
+
+# Or install globally
+pip install grv
 ```
 
 ## Usage

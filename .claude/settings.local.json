@@ -14,7 +14,10 @@
       "Bash(make ci:*)",
       "Bash(make format:*)",
       "Bash(GROVE_ROOT=/Users/timothysweeney/.grove uv run grove clean:*)",
-      "Bash(uv build:*)"
+      "Bash(uv build:*)",
+      "Bash(git -C /Users/timothysweeney/.grv/repos/github_com_tssweeney_grv/tree_branches/update-readme add -A)",
+      "Bash(git -C /Users/timothysweeney/.grv/repos/github_com_tssweeney_grv/tree_branches/update-readme commit -m \"$\\(cat <<''EOF''\nUpdate README with PyPI installation instructions\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/timothysweeney/.grv/repos/github_com_tssweeney_grv/tree_branches/update-readme push origin update-readme)"
     ]
   }
 }
