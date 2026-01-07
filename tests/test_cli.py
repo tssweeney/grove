@@ -262,3 +262,40 @@ class TestClean:
             assert "cleanable" in result.output
             assert "dirty" not in result.output
             assert "Would remove 1 worktree" in result.output
+
+    def test_clean_removes_empty_repo(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        repo_path = tmp_path / "repo"
+        trunk = repo_path / "trunk"
+        trunk.mkdir(parents=True)
+        branch_path = repo_path / "tree_branches" / "feature"
+        branch_path.mkdir(parents=True)
+        branch_info = BranchInfo(name="feature", path=branch_path)
+        safe_status = BranchStatus(
+            name="feature",
+            path=branch_path,
+            has_remote=True,
+            is_merged=True,
+            unpushed_commits=0,
+            uncommitted_changes=0,
+            insertions=0,
+            deletions=0,
+        )
+        call_count = [0]
+
+        def mock_branches_fast(_path: Path) -> list[BranchInfo]:
+            call_count[0] += 1
+            return [branch_info] if call_count[0] == 1 else []
+
+        with (
+            patch("grv.cli.get_all_repos", return_value=[("repo", repo_path)]),
+            patch("grv.cli.get_repo_branches_fast", side_effect=mock_branches_fast),
+            patch("grv.cli.get_branch_status", return_value=safe_status),
+            patch("subprocess.run"),
+        ):
+            result = runner.invoke(main, ["clean", "--force"])
+            assert "Cleaned 1 worktree" in result.output
+            assert "1 empty repo" in result.output
+            assert not repo_path.exists()
