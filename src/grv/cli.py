@@ -63,10 +63,51 @@ def shell(repo: str, branch: str | None = None) -> None:
     os.execvp(user_shell, [user_shell])
 
 
+def _clean_branch(path: Path, branch_name: str, force: bool = False) -> bool:
+    """Clean a single branch if safe. Returns True if cleaned."""
+    # Find trunk path
+    idx = path.parts.index(TREE_BRANCHES_DIR)
+    repo_root = Path(*path.parts[:idx])
+    trunk_path = repo_root / TRUNK_DIR
+
+    status = get_branch_status(path, trunk_path, branch_name)
+
+    if not force and not status.is_safe_to_clean:
+        click.secho(f"\nCannot clean '{branch_name}' - not safe to remove.", fg="red")
+        if not status.has_remote:
+            click.echo("  - No remote branch found")
+        if status.unpushed_commits > 0:
+            click.echo(f"  - {status.unpushed_commits} unpushed commit(s)")
+        if status.uncommitted_changes > 0:
+            click.echo(f"  - {status.uncommitted_changes} uncommitted changes")
+        return False
+
+    if force and not status.is_safe_to_clean:
+        click.secho(f"\nForce deleting '{branch_name}'...", fg="yellow")
+    else:
+        click.secho(f"\nCleaning '{branch_name}'...", fg="green")
+
+    # Remove worktree and branch
+    for cmd in [
+        ["git", "worktree", "remove", "--force" if force else "", str(path)],
+        ["git", "branch", "-D" if force else "-d", branch_name],
+    ]:
+        cmd = [c for c in cmd if c]  # Filter empty strings
+        subprocess.run(cmd, cwd=trunk_path, capture_output=True)
+
+    # Check if repo is now empty
+    if not get_repo_branches_fast(repo_root):
+        click.echo(f"  Removing empty repo {click.style(repo_root.name, fg='yellow')}...")
+        shutil.rmtree(repo_root)
+
+    click.secho("Done.", fg="green")
+    return True
+
+
 @main.command("list")
 def list_cmd() -> None:
     """List all worktrees and select one to enter."""
-    from grv.menu import interactive_select, shell_into
+    from grv.menu import MenuAction, interactive_select, shell_into
 
     repos = get_all_repos()
 
@@ -77,8 +118,17 @@ def list_cmd() -> None:
         return
 
     if result := interactive_select():
-        path, branch_name = result
-        shell_into(path, branch_name)
+        path, branch_name, action = result
+
+        if action == MenuAction.SHELL:
+            shell_into(path, branch_name)
+        elif action == MenuAction.CLEAN:
+            _clean_branch(path, branch_name, force=False)
+        elif action == MenuAction.DELETE:
+            if click.confirm(
+                f"\nForce delete '{branch_name}'? This cannot be undone.", default=False
+            ):
+                _clean_branch(path, branch_name, force=True)
 
 
 @main.command()

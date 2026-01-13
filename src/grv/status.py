@@ -26,6 +26,24 @@ class BranchInfo:
 
 
 @dataclass
+class FooterStatus:
+    """Quick status info for footer display."""
+
+    base_branch: str
+    worktree_name: str
+    has_remote: bool
+    uncommitted: int
+    unpushed: int
+    insertions: int
+    deletions: int
+
+    @property
+    def is_clean(self) -> bool:
+        """Check if safe to clean (has remote, no uncommitted, no unpushed)."""
+        return self.has_remote and self.uncommitted == 0 and self.unpushed == 0
+
+
+@dataclass
 class BranchStatus:
     """Status information for a worktree branch."""
 
@@ -157,3 +175,67 @@ def get_repo_branches_fast(repo_path: Path) -> list[BranchInfo]:
     return [
         BranchInfo(name=name, path=path) for name, path in _find_worktrees(repo_path)
     ]
+
+
+def get_footer_status(branch: BranchInfo) -> FooterStatus:
+    """Get quick status info for footer display."""
+    # Find trunk path by going up from tree_branches
+    idx = branch.path.parts.index(TREE_BRANCHES_DIR)
+    repo_root = Path(*branch.path.parts[:idx])
+    trunk_path = repo_root / TRUNK_DIR
+
+    base_branch = get_default_branch(trunk_path)
+
+    # Check for remote
+    result = subprocess.run(
+        ["git", "ls-remote", "--heads", GIT_REMOTE_NAME, branch.name],
+        cwd=trunk_path,
+        capture_output=True,
+        text=True,
+    )
+    has_remote = bool(result.stdout.strip())
+
+    # Count unpushed commits
+    if has_remote:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"{GIT_REMOTE_NAME}/{branch.name}..{branch.name}"],
+            cwd=branch.path,
+            capture_output=True,
+            text=True,
+        )
+        unpushed = int(result.stdout.strip()) if result.returncode == 0 else 0
+    else:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"{GIT_REMOTE_NAME}/{base_branch}..{branch.name}"],
+            cwd=branch.path,
+            capture_output=True,
+            text=True,
+        )
+        unpushed = int(result.stdout.strip()) if result.returncode == 0 else 0
+
+    # Check uncommitted changes
+    result = subprocess.run(
+        ["git", "diff", "--stat", "HEAD"],
+        cwd=branch.path,
+        capture_output=True,
+        text=True,
+    )
+    uncommitted, insertions, deletions = 0, 0, 0
+    if result.stdout.strip():
+        summary = result.stdout.strip().split("\n")[-1]
+        if "insertion" in summary or "deletion" in summary:
+            ins = re.search(INSERTION_PATTERN, summary)
+            dels = re.search(DELETION_PATTERN, summary)
+            insertions = int(ins.group(1)) if ins else 0
+            deletions = int(dels.group(1)) if dels else 0
+            uncommitted = insertions + deletions
+
+    return FooterStatus(
+        base_branch=base_branch,
+        worktree_name=branch.name,
+        has_remote=has_remote,
+        uncommitted=uncommitted,
+        unpushed=unpushed,
+        insertions=insertions,
+        deletions=deletions,
+    )

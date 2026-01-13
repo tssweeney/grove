@@ -5,6 +5,7 @@ import pytest
 from click.testing import CliRunner
 
 from grv.cli import main
+from grv.menu import MenuAction
 from grv.status import BranchInfo, BranchStatus
 
 
@@ -84,7 +85,7 @@ class TestList:
             patch("grv.cli.get_all_repos", return_value=[("repo", tmp_path)]),
             patch(
                 "grv.menu.interactive_select",
-                return_value=(tmp_path / "main", "main"),
+                return_value=(tmp_path / "main", "main", MenuAction.SHELL),
             ),
             patch("grv.menu.shell_into") as mock_shell,
         ):
