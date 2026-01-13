@@ -103,7 +103,9 @@ def _clean_branch(path: Path, branch_name: str, force: bool = False) -> bool:
 
     # Check if repo is now empty
     if not get_repo_branches_fast(repo_root):
-        click.echo(f"  Removing empty repo {click.style(repo_root.name, fg='yellow')}...")
+        click.echo(
+            f"  Removing empty repo {click.style(repo_root.name, fg='yellow')}..."
+        )
         shutil.rmtree(repo_root)
 
     click.secho("Done.", fg="green")
