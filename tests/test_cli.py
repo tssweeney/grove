@@ -67,6 +67,39 @@ class TestShell:
             )
             assert "Branch: feature" in result.output
 
+    def test_shell_with_from_branch(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        with (
+            patch("grv.cli.ensure_base_repo"),
+            patch("grv.cli.ensure_worktree") as mock_ensure_worktree,
+            patch("os.chdir"),
+            patch("os.execvp"),
+        ):
+            tree_path = (
+                tmp_path
+                / "repos"
+                / "github_com_user_repo"
+                / "tree_branches"
+                / "feature"
+            )
+            tree_path.mkdir(parents=True)
+            result = runner.invoke(
+                main,
+                [
+                    "shell",
+                    "https://github.com/user/repo.git",
+                    "feature",
+                    "--from",
+                    "develop",
+                ],
+            )
+            assert "Branch: feature" in result.output
+            mock_ensure_worktree.assert_called_once()
+            call_kwargs = mock_ensure_worktree.call_args
+            assert call_kwargs.kwargs.get("from_branch") == "develop"
+
 
 class TestList:
     def test_list_no_repos(
