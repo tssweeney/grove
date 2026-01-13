@@ -177,10 +177,28 @@ class TestGetAllRepos:
         assert result[0][0] == "github_com_user_repo"
 
 
+def _mock_worktree_list_output(worktrees: list[Path]) -> str:
+    """Generate mock output for `git worktree list --porcelain`."""
+    lines = []
+    for wt in worktrees:
+        lines.append(f"worktree {wt}")
+        lines.append("HEAD abc123")
+        lines.append("branch refs/heads/branch")
+        lines.append("")
+    return "\n".join(lines)
+
+
 class TestGetRepoBranches:
     def test_no_tree_branches(self, tmp_path: Path) -> None:
-        result = get_repo_branches(tmp_path)
-        assert result == []
+        # Mock git worktree list to return empty (just trunk)
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                return MagicMock(stdout="", returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches(tmp_path)
+            assert result == []
 
     def test_with_branches(self, tmp_path: Path) -> None:
         trunk = tmp_path / "trunk"
@@ -190,7 +208,16 @@ class TestGetRepoBranches:
         branch.mkdir(parents=True)
         (branch / ".git").touch()
 
-        with patch("grv.status.get_branch_status") as mock_status:
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk, branch])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with (
+            patch("subprocess.run", side_effect=mock_run),
+            patch("grv.status.get_branch_status") as mock_status,
+        ):
             mock_status.return_value = BranchStatus(
                 name="feature",
                 path=branch,
@@ -211,10 +238,18 @@ class TestGetRepoBranches:
         branches_dir = tmp_path / "tree_branches"
         branch = branches_dir / "not-a-worktree"
         branch.mkdir(parents=True)
-        # No .git file
+        # No .git file - and it's not in the worktree list
 
-        result = get_repo_branches(tmp_path)
-        assert result == []
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                # Only trunk in the list, not the branch
+                output = _mock_worktree_list_output([trunk])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches(tmp_path)
+            assert result == []
 
     def test_branch_with_slashes(self, tmp_path: Path) -> None:
         trunk = tmp_path / "trunk"
@@ -225,7 +260,16 @@ class TestGetRepoBranches:
         branch.mkdir(parents=True)
         (branch / ".git").touch()
 
-        with patch("grv.status.get_branch_status") as mock_status:
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk, branch])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with (
+            patch("subprocess.run", side_effect=mock_run),
+            patch("grv.status.get_branch_status") as mock_status,
+        ):
             mock_status.return_value = BranchStatus(
                 name="feature/foo",
                 path=branch,
@@ -245,53 +289,100 @@ class TestGetRepoBranches:
 
 class TestGetRepoBranchesFast:
     def test_no_tree_branches(self, tmp_path: Path) -> None:
-        result = get_repo_branches_fast(tmp_path)
-        assert result == []
+        # Mock git worktree list to return empty
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                return MagicMock(stdout="", returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert result == []
 
     def test_with_branches(self, tmp_path: Path) -> None:
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
         branches_dir = tmp_path / "tree_branches"
         branch = branches_dir / "feature"
         branch.mkdir(parents=True)
         (branch / ".git").touch()
 
-        result = get_repo_branches_fast(tmp_path)
-        assert len(result) == 1
-        assert result[0].name == "feature"
-        assert result[0].path == branch
-        assert isinstance(result[0], BranchInfo)
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk, branch])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert len(result) == 1
+            assert result[0].name == "feature"
+            assert result[0].path == branch
+            assert isinstance(result[0], BranchInfo)
 
     def test_skips_non_git_dirs(self, tmp_path: Path) -> None:
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
         branches_dir = tmp_path / "tree_branches"
         branch = branches_dir / "not-a-worktree"
         branch.mkdir(parents=True)
-        # No .git file
+        # No .git file - and it's not in worktree list
 
-        result = get_repo_branches_fast(tmp_path)
-        assert result == []
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert result == []
 
     def test_sorts_by_name(self, tmp_path: Path) -> None:
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
         branches_dir = tmp_path / "tree_branches"
+        branches = []
         for name in ["zebra", "alpha", "middle"]:
             branch = branches_dir / name
             branch.mkdir(parents=True)
             (branch / ".git").touch()
+            branches.append(branch)
 
-        result = get_repo_branches_fast(tmp_path)
-        assert [b.name for b in result] == ["alpha", "middle", "zebra"]
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk] + branches)
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert [b.name for b in result] == ["alpha", "middle", "zebra"]
 
     def test_branch_with_slashes(self, tmp_path: Path) -> None:
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
         branches_dir = tmp_path / "tree_branches"
         # Branch name "feature/foo" creates nested directory
         branch = branches_dir / "feature" / "foo"
         branch.mkdir(parents=True)
         (branch / ".git").touch()
 
-        result = get_repo_branches_fast(tmp_path)
-        assert len(result) == 1
-        assert result[0].name == "feature/foo"
-        assert result[0].path == branch
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk, branch])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert len(result) == 1
+            assert result[0].name == "feature/foo"
+            assert result[0].path == branch
 
     def test_mixed_branches_with_and_without_slashes(self, tmp_path: Path) -> None:
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
         branches_dir = tmp_path / "tree_branches"
         # Simple branch
         simple = branches_dir / "main"
@@ -302,11 +393,18 @@ class TestGetRepoBranchesFast:
         nested.mkdir(parents=True)
         (nested / ".git").touch()
 
-        result = get_repo_branches_fast(tmp_path)
-        assert len(result) == 2
-        names = [b.name for b in result]
-        assert "main" in names
-        assert "feature/bar" in names
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                output = _mock_worktree_list_output([trunk, simple, nested])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert len(result) == 2
+            names = [b.name for b in result]
+            assert "main" in names
+            assert "feature/bar" in names
 
 
 class TestEdgeCases:
@@ -354,3 +452,36 @@ class TestEdgeCases:
 
         result = get_all_repos()
         assert result == []
+
+    def test_git_worktree_list_failure(self, tmp_path: Path) -> None:
+        """Test when git worktree list fails."""
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
+
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                return MagicMock(stdout="", returncode=1)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            assert result == []
+
+    def test_worktree_list_no_tree_branches_dir(self, tmp_path: Path) -> None:
+        """Test when trunk exists but tree_branches directory does not."""
+        trunk = tmp_path / "trunk"
+        trunk.mkdir()
+        # tree_branches dir does not exist
+        branch_path = tmp_path / "tree_branches" / "feature"
+
+        def mock_run(cmd: list[str], **_kw: object) -> MagicMock:
+            if "worktree" in cmd:
+                # Git returns a worktree that would be under tree_branches
+                output = _mock_worktree_list_output([trunk, branch_path])
+                return MagicMock(stdout=output, returncode=0)
+            return MagicMock(stdout="", returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = get_repo_branches_fast(tmp_path)
+            # Should return empty because tree_branches_dir.exists() is False
+            assert result == []
