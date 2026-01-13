@@ -40,7 +40,13 @@ def main(ctx: click.Context) -> None:
 @main.command()
 @click.argument("repo")
 @click.argument("branch", required=False)
-def shell(repo: str, branch: str | None = None) -> None:
+@click.option(
+    "--from",
+    "from_branch",
+    default=None,
+    help="Base branch to create new branch from (instead of main/master).",
+)
+def shell(repo: str, branch: str | None = None, from_branch: str | None = None) -> None:
     """Open a shell in a git worktree."""
     root = get_grv_root()
     repo_id = extract_repo_id(repo)
@@ -53,7 +59,7 @@ def shell(repo: str, branch: str | None = None) -> None:
         branch = get_default_branch(trunk_path)
 
     tree_path = repo_path / TREE_BRANCHES_DIR / branch
-    ensure_worktree(trunk_path, tree_path, branch)
+    ensure_worktree(trunk_path, tree_path, branch, from_branch=from_branch)
 
     click.secho("\nReady! Entering worktree shell...", fg="green", bold=True)
     click.echo(f"\n  Branch: {click.style(branch, fg='cyan', bold=True)}")
