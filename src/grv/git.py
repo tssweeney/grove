@@ -56,8 +56,18 @@ def ensure_base_repo(repo_url: str, base_path: Path) -> None:
         run_git("checkout", "--detach", detach_ref, cwd=base_path)
 
 
-def ensure_worktree(base_path: Path, tree_path: Path, branch: str) -> None:
-    """Ensure the worktree exists for the given branch."""
+def ensure_worktree(
+    base_path: Path, tree_path: Path, branch: str, from_branch: str | None = None
+) -> None:
+    """Ensure the worktree exists for the given branch.
+
+    Args:
+        base_path: Path to the base repository (trunk).
+        tree_path: Path where the worktree should be created.
+        branch: Name of the branch to create/checkout.
+        from_branch: Optional base branch to create new branch from.
+            If not specified, uses the repository's default branch.
+    """
     if tree_path.exists():
         click.secho("Worktree ready.", fg="green", err=True)
         return
@@ -85,13 +95,13 @@ def ensure_worktree(base_path: Path, tree_path: Path, branch: str) -> None:
             cwd=base_path,
         )
     else:
-        default_branch = get_default_branch(base_path)
+        base_branch = from_branch if from_branch else get_default_branch(base_path)
         run_git(
             "worktree",
             "add",
             "-b",
             branch,
             str(tree_path),
-            default_branch,
+            base_branch,
             cwd=base_path,
         )

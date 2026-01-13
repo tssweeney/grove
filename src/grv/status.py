@@ -7,7 +7,6 @@ from pathlib import Path
 from grv.config import get_grv_root
 from grv.constants import (
     DELETION_PATTERN,
-    GIT_DIR,
     GIT_REMOTE_NAME,
     INSERTION_PATTERN,
     REPOS_DIR,
@@ -146,15 +145,43 @@ def get_all_repos() -> list[tuple[str, Path]]:
 
 
 def _find_worktrees(repo_path: Path) -> list[tuple[str, Path]]:
-    """Find all worktree directories and their branch names."""
+    """Find all worktree directories and their branch names.
+
+    Uses `git worktree list` from the trunk to efficiently find worktrees
+    without recursively scanning directories (which is slow when repos
+    contain nested git repositories like node_modules or submodules).
+    """
+    trunk_path = repo_path / TRUNK_DIR
     tree_branches_dir = repo_path / TREE_BRANCHES_DIR
-    if not tree_branches_dir.exists():
+
+    if not trunk_path.exists():
         return []
+
+    # Use git worktree list to get all worktrees
+    result_proc = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=trunk_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result_proc.returncode != 0:
+        return []
+
     result = []
-    for git_file in tree_branches_dir.rglob(GIT_DIR):
-        branch_dir = git_file.parent
-        branch_name = str(branch_dir.relative_to(tree_branches_dir))
-        result.append((branch_name, branch_dir))
+    # Parse porcelain output: each worktree block starts with "worktree <path>"
+    for line in result_proc.stdout.split("\n"):
+        if line.startswith("worktree "):
+            worktree_path = Path(line[9:])  # Skip "worktree " prefix
+            # Only include worktrees under tree_branches/
+            if tree_branches_dir.exists():
+                try:
+                    branch_name = str(worktree_path.relative_to(tree_branches_dir))
+                    result.append((branch_name, worktree_path))
+                except ValueError:
+                    # Path is not under tree_branches_dir (e.g., trunk)
+                    pass
+
     return sorted(result)
 
 
