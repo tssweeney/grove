@@ -55,10 +55,7 @@ class BranchStatus:
             return True
 
         # Case B: Merged into main (even if remote is gone)
-        if self.is_merged:
-            return True
-
-        return False
+        return bool(self.is_merged)
 
 
 def get_branch_status(tree_path: Path, trunk_path: Path, branch: str) -> BranchStatus:
