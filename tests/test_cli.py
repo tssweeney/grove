@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from grv.cli import main
 from grv.menu import MenuAction
 from grv.status import BranchInfo, BranchStatus
+from grv.constants import WORKTREES_DIR
 
 
 @pytest.fixture
@@ -100,6 +101,108 @@ class TestShell:
             mock_ensure_worktree.assert_called_once()
             call_kwargs = mock_ensure_worktree.call_args
             assert call_kwargs.kwargs.get("from_branch") == "develop"
+
+    def test_shell_local_with_branch(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        repo_root = tmp_path / "current"
+        tree_path = tmp_path / WORKTREES_DIR / repo_root.name / "feature"
+        with (
+            patch("grv.cli.get_repo_root", return_value=repo_root),
+            patch("grv.cli.is_worktree_registered", return_value=False),
+            patch("grv.cli.branch_exists_locally", return_value=True),
+            patch("grv.cli.run_git") as mock_run,
+            patch("os.chdir"),
+            patch("os.execvp"),
+        ):
+            result = runner.invoke(main, ["shell", "--local", "feature"])
+            assert "Branch: feature" in result.output
+            mock_run.assert_called_once_with(
+                "worktree", "add", str(tree_path), "feature", cwd=repo_root
+            )
+
+    def test_shell_local_without_branch(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        repo_root = tmp_path / "current"
+        tree_path = tmp_path / WORKTREES_DIR / repo_root.name / "main"
+        with (
+            patch("grv.cli.get_repo_root", return_value=repo_root),
+            patch("grv.cli.get_current_branch", return_value="main"),
+            patch("grv.cli.is_worktree_registered", return_value=False),
+            patch("grv.cli.branch_exists_locally", return_value=True),
+            patch("grv.cli.run_git") as mock_run,
+            patch("os.chdir"),
+            patch("os.execvp"),
+        ):
+            result = runner.invoke(main, ["shell", "--local"])
+            assert "Branch: main" in result.output
+            mock_run.assert_called_once_with(
+                "worktree", "add", str(tree_path), "main", cwd=repo_root
+            )
+
+    def test_shell_local_creates_new_branch_when_missing(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        repo_root = tmp_path / "current"
+        tree_path = tmp_path / WORKTREES_DIR / repo_root.name / "feature"
+        with (
+            patch("grv.cli.get_repo_root", return_value=repo_root),
+            patch("grv.cli.is_worktree_registered", return_value=False),
+            patch("grv.cli.branch_exists_locally", return_value=False),
+            patch("grv.cli.run_git") as mock_run,
+            patch("os.chdir"),
+            patch("os.execvp"),
+        ):
+            result = runner.invoke(main, ["shell", "--local", "feature"])
+            assert "Branch: feature" in result.output
+            mock_run.assert_called_once_with(
+                "worktree", "add", "-b", "feature", str(tree_path), cwd=repo_root
+            )
+
+    def test_shell_local_reuses_existing(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        repo_root = tmp_path / "current"
+        with (
+            patch("grv.cli.get_repo_root", return_value=repo_root),
+            patch("grv.cli.is_worktree_registered", return_value=True),
+            patch("grv.cli.run_git") as mock_run,
+            patch("os.chdir"),
+            patch("os.execvp"),
+        ):
+            result = runner.invoke(main, ["shell", "--local", "feature"])
+            assert "Branch: feature" in result.output
+            mock_run.assert_not_called()
+
+    def test_shell_local_not_in_repo(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from subprocess import CalledProcessError
+
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        with (
+            patch(
+                "grv.cli.get_repo_root",
+                side_effect=CalledProcessError(128, ["git"]),
+            ),
+            patch("os.chdir"),
+            patch("os.execvp"),
+        ):
+            result = runner.invoke(main, ["shell", "--local", "feature"])
+            assert result.exit_code != 0
+
+    def test_shell_without_repo_arg_fails(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GRV_ROOT", str(tmp_path))
+        result = runner.invoke(main, ["shell"])
+        assert result.exit_code == 1
+        assert "REPO argument required" in result.output
 
 
 class TestList:

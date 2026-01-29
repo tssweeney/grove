@@ -13,8 +13,18 @@ from grv.constants import (
     SHELL_ENV_VAR,
     TREE_BRANCHES_DIR,
     TRUNK_DIR,
+    WORKTREES_DIR,
 )
-from grv.git import ensure_base_repo, ensure_worktree, get_default_branch
+from grv.git import (
+    branch_exists_locally,
+    ensure_base_repo,
+    ensure_worktree,
+    get_current_branch,
+    get_default_branch,
+    get_repo_root,
+    is_worktree_registered,
+    run_git,
+)
 from grv.status import (
     BranchStatus,
     get_all_repos,
@@ -38,7 +48,7 @@ def main(ctx: click.Context) -> None:
 
 
 @main.command()
-@click.argument("repo")
+@click.argument("repo", required=False)
 @click.argument("branch", required=False)
 @click.option(
     "--from",
@@ -46,21 +56,95 @@ def main(ctx: click.Context) -> None:
     default=None,
     help="Base branch to create new branch from (instead of main/master).",
 )
-def shell(repo: str, branch: str | None = None, from_branch: str | None = None) -> None:
-    """Open a shell in a git worktree."""
+@click.option(
+    "--local",
+    "-L",
+    "local",
+    is_flag=True,
+    help="Use the current git repository instead of cloning.",
+)
+def shell(
+    repo: str | None = None,
+    branch: str | None = None,
+    from_branch: str | None = None,
+    local: bool = False,
+) -> None:
+    """Open a shell in a git worktree.
+
+    Use --local to create or reuse a worktree from the repository rooted at the current directory.
+    """
     root = get_grv_root()
+
+    if local and branch is None:
+        branch = repo
+
+    if local:
+        tree_path, branch = _prepare_local_worktree(root, branch)
+    else:
+        if not repo:
+            click.secho(
+                "Error: REPO argument required when not using --local.",
+                fg="red",
+                err=True,
+            )
+            raise SystemExit(1)
+
+        tree_path, branch = _prepare_remote_worktree(
+            root, repo, branch, from_branch=from_branch
+        )
+
+    _enter_shell(tree_path, branch)
+
+
+def _prepare_remote_worktree(
+    root: Path,
+    repo: str,
+    branch: str | None,
+    from_branch: str | None,
+) -> tuple[Path, str]:
     repo_id = extract_repo_id(repo)
     repo_path = root / REPOS_DIR / repo_id
-
     trunk_path = repo_path / TRUNK_DIR
     ensure_base_repo(repo, trunk_path)
 
-    if branch is None:
-        branch = get_default_branch(trunk_path)
+    target_branch = branch if branch is not None else get_default_branch(trunk_path)
+    tree_path = repo_path / TREE_BRANCHES_DIR / target_branch
+    ensure_worktree(
+        trunk_path,
+        tree_path,
+        target_branch,
+        from_branch=from_branch,
+    )
 
-    tree_path = repo_path / TREE_BRANCHES_DIR / branch
-    ensure_worktree(trunk_path, tree_path, branch, from_branch=from_branch)
+    return tree_path, target_branch
 
+
+def _prepare_local_worktree(root: Path, branch: str | None) -> tuple[Path, str]:
+    try:
+        repo_root = get_repo_root()
+    except subprocess.CalledProcessError as exc:
+        raise click.ClickException(
+            "Current directory is not a git repository."
+        ) from exc
+
+    target_branch = branch if branch is not None else get_current_branch(repo_root)
+    tree_path = root / WORKTREES_DIR / repo_root.name / target_branch
+    tree_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if is_worktree_registered(repo_root, tree_path):
+        return tree_path, target_branch
+
+    worktree_cmd = ["worktree", "add"]
+    if branch_exists_locally(repo_root, target_branch):
+        worktree_cmd.extend([str(tree_path), target_branch])
+    else:
+        worktree_cmd.extend(["-b", target_branch, str(tree_path)])
+
+    run_git(*worktree_cmd, cwd=repo_root)
+    return tree_path, target_branch
+
+
+def _enter_shell(tree_path: Path, branch: str) -> None:
     click.secho("\nReady! Entering worktree shell...", fg="green", bold=True)
     click.echo(f"\n  Branch: {click.style(branch, fg='cyan', bold=True)}")
     click.echo(f"  Path:   {click.style(str(tree_path), fg='blue')}\n")

@@ -21,6 +21,7 @@ Meanwhile, countless tools are appearing daily—each bundling worktree manageme
 
 ```bash
 grv shell <repo> [branch]  # Shell into a worktree (clones if needed)
+grv shell --local [branch]  # Worktree for the repo in the current directory
 grv list                    # Browse your worktrees
 grv clean                   # Cleanup remotely-backed work
 ```
@@ -44,6 +45,10 @@ pip install grv
 grv shell git@github.com:user/repo.git
 grv shell git@github.com:user/repo.git feature-branch
 
+# Use --local to create worktree from current repository
+grv shell --local feature-branch    # Create/reuse worktree for feature-branch
+grv shell --local                   # Create/reuse worktree for current branch
+
 # List all worktrees with status
 grv list
 
@@ -62,15 +67,22 @@ grv clean --dry-run
 └── tree_branches/
     ├── main/           # Worktree for main
     └── feature-branch/ # Worktree for feature-branch
+
+~/.grv/worktrees/github_com_user_repo/
+├── feature-1/          # Local worktree (with --local)
+└── feature-2/          # Local worktree (with --local)
 ```
 
 Each branch gets its own directory. Switch between branches by switching directories.
+
+When using `--local`, worktrees are created from your current repository instead of cloning a remote.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `shell REPO [BRANCH]` | Open shell in worktree |
+| `shell --local [BRANCH]` | Open shell in local worktree from current repo |
 | `list` | Show all worktrees with status |
 | `clean` | Remove safe-to-clean worktrees |
 

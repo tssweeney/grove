@@ -5,7 +5,10 @@ from grv.git import (
     branch_exists_locally,
     ensure_base_repo,
     ensure_worktree,
+    get_current_branch,
     get_default_branch,
+    get_repo_root,
+    is_worktree_registered,
     run_git,
 )
 
@@ -121,3 +124,62 @@ class TestEnsureWorktree:
         ):
             mock_git.return_value = MagicMock(stdout="", returncode=0)
             ensure_worktree(base_path, tree_path, "new-feature")
+
+
+class TestGetRepoRoot:
+    def test_returns_repo_root(self) -> None:
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(stdout="/fake/repo\n")
+            result = get_repo_root()
+            assert result == Path("/fake/repo")
+
+    def test_with_custom_cwd(self, tmp_path: Path) -> None:
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(stdout="/other/repo\n")
+            result = get_repo_root(tmp_path)
+            assert result == Path("/other/repo")
+            mock_git.assert_called_once()
+
+
+class TestGetCurrentBranch:
+    def test_returns_branch_name(self, tmp_path: Path) -> None:
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(stdout="main\n")
+            result = get_current_branch(tmp_path)
+            assert result == "main"
+
+
+class TestIsWorktreeRegistered:
+    def test_worktree_is_registered(self, tmp_path: Path) -> None:
+        tree_path = tmp_path / "worktree"
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(
+                stdout=f"worktree {tree_path}\nHEAD abcd1234\n\nworktree /other/path\n"
+            )
+            result = is_worktree_registered(tmp_path, tree_path)
+            assert result is True
+
+    def test_worktree_not_registered(self, tmp_path: Path) -> None:
+        tree_path = tmp_path / "worktree"
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(stdout="worktree /other/path\nHEAD abcd1234\n")
+            result = is_worktree_registered(tmp_path, tree_path)
+            assert result is False
+
+    def test_worktree_with_empty_lines(self, tmp_path: Path) -> None:
+        tree_path = tmp_path / "worktree"
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(
+                stdout=f"worktree {tree_path}\nHEAD abcd1234\n\nworktree /other/path\n"
+            )
+            result = is_worktree_registered(tmp_path, tree_path)
+            assert result is True
+
+    def test_worktree_not_found_with_empty_lines(self, tmp_path: Path) -> None:
+        tree_path = tmp_path / "missing"
+        with patch("grv.git.run_git") as mock_git:
+            mock_git.return_value = MagicMock(
+                stdout="worktree /first/path\nHEAD abcd1234\n\nworktree /second/path\n"
+            )
+            result = is_worktree_registered(tmp_path, tree_path)
+            assert result is False

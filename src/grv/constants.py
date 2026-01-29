@@ -5,6 +5,7 @@ DEFAULT_GRV_ROOT = "~/.grv"
 REPOS_DIR = "repos"
 TRUNK_DIR = "trunk"
 TREE_BRANCHES_DIR = "tree_branches"
+WORKTREES_DIR = "worktrees"
 
 # Git constants
 GIT_DIR = ".git"

@@ -26,7 +26,6 @@ def get_default_branch(repo_path: Path) -> str:
     result = run_git("symbolic-ref", GIT_REF_REMOTE_HEAD, cwd=repo_path, capture=True)
     return result.stdout.strip().split("/")[-1]
 
-
 def branch_exists_locally(base_path: Path, branch: str) -> bool:
     """Check if a branch exists locally."""
     ref = GIT_REF_HEADS_FMT.format(branch=branch)
@@ -105,3 +104,35 @@ def ensure_worktree(
             base_branch,
             cwd=base_path,
         )
+
+
+def get_repo_root(cwd: Path | None = None) -> Path:
+    """Return the top-level git directory for the given cwd (defaults to current)."""
+    target = cwd if cwd else Path.cwd()
+    result = run_git("rev-parse", "--show-toplevel", cwd=target, capture=True)
+    return Path(result.stdout.strip())
+
+
+def get_current_branch(repo_path: Path) -> str:
+    """Return the branch name currently checked out in the repository."""
+    result = run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=repo_path, capture=True)
+    return result.stdout.strip()
+
+
+def is_worktree_registered(repo_path: Path, tree_path: Path) -> bool:
+    """Check if the given path is a registered worktree for the repository."""
+    result = run_git("worktree", "list", "--porcelain", cwd=repo_path, capture=True)
+    target = tree_path.resolve()
+    current: Path | None = None
+
+    for line in result.stdout.splitlines():
+        if not line:
+            current = None
+            continue
+        prefix, _, value = line.partition(" ")
+        if prefix == "worktree":
+            current = Path(value).resolve()
+            if current == target:
+                return True
+
+    return False
