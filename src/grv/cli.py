@@ -39,30 +39,37 @@ def main(ctx: click.Context) -> None:
         click.echo(ctx.get_help())
 
 
-@main.command()
-@click.argument("repo")
-@click.argument("branch", required=False)
-@click.option(
-    "--from",
-    "from_branch",
-    default=None,
-    help="Base branch to create new branch from (instead of main/master).",
-)
-def shell(repo: str, branch: str | None = None, from_branch: str | None = None) -> None:
-    """Open a shell in a git worktree.
+def _resolve_worktree(
+    repo: str, branch: str | None, from_branch: str | None, err: bool = False
+) -> Path:
+    """Resolve repo/branch to worktree path, creating if needed.
 
-    REPO can be a git URL or a GitHub PR URL (e.g., github.com/owner/repo/pull/123).
+    Args:
+        repo: Git URL or GitHub PR URL
+        branch: Branch name (None for default branch, must be None for PR URLs)
+        from_branch: Base branch for new branches
+        err: If True, output progress to stderr instead of stdout
+
+    Returns:
+        Path to the worktree directory
     """
+    output = (
+        click.echo if not err else lambda msg, **kw: click.echo(msg, err=True, **kw)
+    )
+    secho = (
+        click.secho if not err else lambda msg, **kw: click.secho(msg, err=True, **kw)
+    )
+
     # Handle PR URLs
     if is_pr_url(repo):
         if branch is not None:
-            click.secho("Cannot specify branch argument with a PR URL.", fg="red")
+            secho("Cannot specify branch argument with a PR URL.", fg="red")
             raise SystemExit(1)
-        click.echo("Resolving PR...")
+        output("Resolving PR...")
         try:
             pr_info = resolve_pr(repo)
         except RuntimeError as e:
-            click.secho(str(e), fg="red")
+            secho(str(e), fg="red")
             raise SystemExit(1) from e
         repo = pr_info.repo_url
         branch = pr_info.branch
@@ -80,12 +87,57 @@ def shell(repo: str, branch: str | None = None, from_branch: str | None = None) 
     tree_path = repo_path / TREE_BRANCHES_DIR / branch
     ensure_worktree(trunk_path, tree_path, branch, from_branch=from_branch)
 
+    return tree_path
+
+
+@main.command()
+@click.argument("repo")
+@click.argument("branch", required=False)
+@click.option(
+    "--from",
+    "from_branch",
+    default=None,
+    help="Base branch to create new branch from (instead of main/master).",
+)
+def shell(repo: str, branch: str | None = None, from_branch: str | None = None) -> None:
+    """Open a shell in a git worktree.
+
+    REPO can be a git URL or a GitHub PR URL (e.g., github.com/owner/repo/pull/123).
+    """
+    tree_path = _resolve_worktree(repo, branch, from_branch)
+    branch_name = tree_path.name
+
     click.secho("\nReady! Entering worktree shell...", fg="green", bold=True)
-    click.echo(f"\n  Branch: {click.style(branch, fg='cyan', bold=True)}")
+    click.echo(f"\n  Branch: {click.style(branch_name, fg='cyan', bold=True)}")
     click.echo(f"  Path:   {click.style(str(tree_path), fg='blue')}\n")
     os.chdir(tree_path)
     user_shell = os.environ.get(SHELL_ENV_VAR, DEFAULT_SHELL)
     os.execvp(user_shell, [user_shell])
+
+
+@main.command("dir")
+@click.argument("repo")
+@click.argument("branch", required=False)
+@click.option(
+    "--from",
+    "from_branch",
+    default=None,
+    help="Base branch to create new branch from (instead of main/master).",
+)
+def dir_cmd(
+    repo: str, branch: str | None = None, from_branch: str | None = None
+) -> None:
+    """Print worktree path to stdout for piping.
+
+    REPO can be a git URL or a GitHub PR URL (e.g., github.com/owner/repo/pull/123).
+
+    \b
+    Examples:
+        grv dir git@github.com:user/repo.git | xargs code
+        grv dir https://github.com/user/repo/pull/123 | xargs cd
+    """
+    tree_path = _resolve_worktree(repo, branch, from_branch, err=True)
+    click.echo(str(tree_path))
 
 
 def _clean_branch(path: Path, branch_name: str, force: bool = False) -> bool:

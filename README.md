@@ -17,10 +17,11 @@ Meanwhile, countless tools are appearing daily—each bundling worktree manageme
 
 ## The Solution
 
-`grv` is an extremely minimalist worktree manager. Three commands:
+`grv` is an extremely minimalist worktree manager. Four commands:
 
 ```bash
 grv shell <repo> [branch]  # Shell into a worktree (clones if needed)
+grv dir <repo> [branch]    # Print worktree path (for piping)
 grv list                    # Browse your worktrees
 grv clean                   # Cleanup remotely-backed work
 ```
@@ -43,6 +44,13 @@ pip install grv
 # Open a shell in a worktree (clones repo if needed)
 grv shell git@github.com:user/repo.git
 grv shell git@github.com:user/repo.git feature-branch
+
+# Jump straight to a PR
+grv shell https://github.com/user/repo/pull/123
+
+# Get worktree path for piping to other tools
+grv dir git@github.com:user/repo.git | xargs code
+grv dir https://github.com/user/repo/pull/42 | xargs code
 
 # List all worktrees with status
 grv list
@@ -71,8 +79,12 @@ Each branch gets its own directory. Switch between branches by switching directo
 | Command | Description |
 |---------|-------------|
 | `shell REPO [BRANCH]` | Open shell in worktree |
+| `dir REPO [BRANCH]` | Print worktree path to stdout |
 | `list` | Show all worktrees with status |
 | `clean` | Remove safe-to-clean worktrees |
+
+`REPO` can be a git URL or a GitHub PR URL (e.g., `https://github.com/user/repo/pull/123`).
+PR URLs require the [GitHub CLI](https://cli.github.com) (`gh`) to be installed.
 
 ## Configuration
 
