@@ -140,7 +140,11 @@ class TestResolvePr:
         """
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = '{"headRefName":"feature-branch","headRepository":{"url":"https://github.com/owner/repo"}}'
+        mock_result.stdout = (
+            '{"headRefName":"feature-branch",'
+            '"headRepository":{"name":"repo"},'
+            '"headRepositoryOwner":{"login":"owner"}}'
+        )
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
             info = resolve_pr("https://github.com/owner/repo/pull/42")
@@ -162,7 +166,11 @@ class TestResolvePr:
         """
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = '{"headRefName":"my-branch","headRepository":{"url":"https://github.com/owner/repo"}}'
+        mock_result.stdout = (
+            '{"headRefName":"my-branch",'
+            '"headRepository":{"name":"repo"},'
+            '"headRepositoryOwner":{"login":"owner"}}'
+        )
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
             info = resolve_pr("github.com/owner/repo/pull/99")

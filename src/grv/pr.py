@@ -13,6 +13,7 @@ from grv.constants import (
     GH_PR_JSON_FIELDS,
     GITHUB_HOST,
     GITHUB_PR_PATH_PATTERN,
+    GITHUB_REPO_URL_FMT,
 )
 
 
@@ -74,7 +75,9 @@ def resolve_pr(url: str) -> PRInfo:
 
     try:
         data = json.loads(result.stdout)
-        repo_url = data["headRepository"]["url"]
+        owner = data["headRepositoryOwner"]["login"]
+        repo = data["headRepository"]["name"]
+        repo_url = GITHUB_REPO_URL_FMT.format(owner=owner, repo=repo)
         branch = data["headRefName"]
     except (json.JSONDecodeError, KeyError) as exc:
         raise RuntimeError(ERR_PR_PARSE_FAILED) from exc

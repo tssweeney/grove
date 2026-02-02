@@ -40,7 +40,8 @@ GITHUB_HOST = "github.com"
 
 # GitHub CLI
 GH_CLI_INSTALL_URL = "https://cli.github.com"
-GH_PR_JSON_FIELDS = "headRefName,headRepository"
+GH_PR_JSON_FIELDS = "headRefName,headRepository,headRepositoryOwner"
+GITHUB_REPO_URL_FMT = "https://github.com/{owner}/{repo}"
 
 # Error messages
 ERR_GH_NOT_FOUND = (
