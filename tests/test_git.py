@@ -110,7 +110,16 @@ class TestEnsureWorktree:
             )
             ensure_worktree(base_path, tree_path, "feature")
 
-    def test_create_worktree_new_branch(self, tmp_path: Path) -> None:
+    def test_create_worktree_new_branch_uses_remote_default(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Requirement: New branches start from latest remote main/master
+        Interface: git worktree add command arguments
+        Given: A new branch that doesn't exist locally or remotely
+        When: ensure_worktree is called without from_branch
+        Then: git worktree add uses origin/main as the starting point
+        """
         base_path = tmp_path / "base"
         base_path.mkdir()
         tree_path = tmp_path / "tree"
@@ -121,3 +130,62 @@ class TestEnsureWorktree:
         ):
             mock_git.return_value = MagicMock(stdout="", returncode=0)
             ensure_worktree(base_path, tree_path, "new-feature")
+            # Find the worktree add call (first arg is "worktree")
+            worktree_calls = [
+                c for c in mock_git.call_args_list if c[0][0] == "worktree"
+            ]
+            assert len(worktree_calls) == 1
+            call_args = worktree_calls[0][0]
+            # The last argument should be the base ref - must be origin/main
+            assert call_args[-1] == "origin/main"
+
+    def test_create_worktree_new_branch_uses_remote_master(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Requirement: New branches start from latest remote main/master
+        Interface: git worktree add command arguments
+        Given: A repo using master as default branch
+        When: ensure_worktree is called for a new branch
+        Then: git worktree add uses origin/master as the starting point
+        """
+        base_path = tmp_path / "base"
+        base_path.mkdir()
+        tree_path = tmp_path / "tree"
+        with (
+            patch("grv.git.branch_exists_locally", return_value=False),
+            patch("grv.git.run_git") as mock_git,
+            patch("grv.git.get_default_branch", return_value="master"),
+        ):
+            mock_git.return_value = MagicMock(stdout="", returncode=0)
+            ensure_worktree(base_path, tree_path, "new-feature")
+            worktree_calls = [
+                c for c in mock_git.call_args_list if c[0][0] == "worktree"
+            ]
+            assert len(worktree_calls) == 1
+            call_args = worktree_calls[0][0]
+            assert call_args[-1] == "origin/master"
+
+    def test_create_worktree_with_from_branch_uses_remote(self, tmp_path: Path) -> None:
+        """
+        Requirement: Explicit --from branch also uses remote tracking ref
+        Interface: git worktree add command arguments
+        Given: User specifies --from develop
+        When: ensure_worktree is called with from_branch="develop"
+        Then: git worktree add uses origin/develop as the starting point
+        """
+        base_path = tmp_path / "base"
+        base_path.mkdir()
+        tree_path = tmp_path / "tree"
+        with (
+            patch("grv.git.branch_exists_locally", return_value=False),
+            patch("grv.git.run_git") as mock_git,
+        ):
+            mock_git.return_value = MagicMock(stdout="", returncode=0)
+            ensure_worktree(base_path, tree_path, "new-feature", from_branch="develop")
+            worktree_calls = [
+                c for c in mock_git.call_args_list if c[0][0] == "worktree"
+            ]
+            assert len(worktree_calls) == 1
+            call_args = worktree_calls[0][0]
+            assert call_args[-1] == "origin/develop"

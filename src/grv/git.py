@@ -96,12 +96,13 @@ def ensure_worktree(
         )
     else:
         base_branch = from_branch if from_branch else get_default_branch(base_path)
+        base_ref = f"{GIT_REMOTE_NAME}/{base_branch}"
         run_git(
             "worktree",
             "add",
             "-b",
             branch,
             str(tree_path),
-            base_branch,
+            base_ref,
             cwd=base_path,
         )
